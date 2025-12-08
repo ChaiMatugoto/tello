@@ -1,4 +1,5 @@
 # main.py
+import time
 import cv2
 from tello_controller import TelloController
 from aruco_detector import ArUcoDetector
@@ -25,6 +26,12 @@ def main():
         key = cv2.waitKey(1) & 0xFF
         if controller.handle_key(key):
             break
+
+        # ★ここが重要：毎フレーム速度コマンドを送る
+        controller.update_motion()
+
+        # 送信頻度を落としすぎない程度のスリープ（だいたい20Hz）
+        time.sleep(0.05)
 
     controller.cleanup()
     cv2.destroyAllWindows()

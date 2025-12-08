@@ -7,12 +7,19 @@ from djitellopy import Tello
 class TelloController:
     """Telloの接続・映像取得・キー操作をまとめるクラス"""
 
-    def __init__(self, move_dist=30, rotate_deg=30):
+    def __init__(self):
         self.tello = Tello()
-        self.move_dist = move_dist
-        self.rotate_deg = rotate_deg
         self.in_flight = False
         self.frame_read = None
+
+        # ここがポイント：現在の速度を状態として持つ
+        self.vx = 0  # 前後
+        self.vy = 0  # 左右
+        self.vz = 0  # 上下
+        self.yaw = 0  # 回転
+
+        # 速度の大きさ（-100〜100の範囲で使う）
+        self.speed = 40
 
     def connect_and_start_stream(self):
         """Telloに接続して映像ストリーム開始"""
@@ -37,10 +44,13 @@ class TelloController:
         キー入力に応じてTelloを操作する。
         戻り値: True を返したらメインループ終了。
         """
+
+        # ===== 終了 =====
         if key == ord('z'):
             print("Exiting loop")
             return True
 
+        # ===== 離陸・着陸 =====
         elif key == ord('t'):
             print("Takeoff requested")
             try:
@@ -51,6 +61,9 @@ class TelloController:
                 else:
                     self.tello.takeoff()
                     self.in_flight = True
+
+                    # 離陸直後は速度ゼロからスタート
+                    self.vx = self.vy = self.vz = self.yaw = 0
             except Exception as e:
                 print(f"Takeoff failed: {e}")
 
@@ -61,40 +74,58 @@ class TelloController:
             except Exception as e:
                 print(f"Land failed: {e}")
             self.in_flight = False
+            self.vx = self.vy = self.vz = self.yaw = 0
 
+        # ===== ここから移動系：速度を変えるだけ =====
+
+        # 前後
         elif key == ord('w'):
-            print("Forward")
-            self.tello.move_forward(self.move_dist)
-
+            print("Set: forward")
+            self.vx = self.speed
         elif key == ord('s'):
-            print("Backward")
-            self.tello.move_back(self.move_dist)
+            print("Set: backward")
+            self.vx = -self.speed
 
+        # 左右
         elif key == ord('a'):
-            print("Left")
-            self.tello.move_left(self.move_dist)
-
+            print("Set: left")
+            self.vy = -self.speed
         elif key == ord('d'):
-            print("Right")
-            self.tello.move_right(self.move_dist)
+            print("Set: right")
+            self.vy = self.speed
 
+        # 上下
         elif key == ord('r'):
-            print("Up")
-            self.tello.move_up(self.move_dist)
-
+            print("Set: up")
+            self.vz = self.speed
         elif key == ord('f'):
-            print("Down")
-            self.tello.move_down(self.move_dist)
+            print("Set: down")
+            self.vz = -self.speed
 
+        # 回転
         elif key == ord('e'):
-            print("Yaw right")
-            self.tello.rotate_clockwise(self.rotate_deg)
-
+            print("Set: yaw right")
+            self.yaw = self.speed
         elif key == ord('x'):
-            print("Yaw left")
-            self.tello.rotate_counter_clockwise(self.rotate_deg)
+            print("Set: yaw left")
+            self.yaw = -self.speed
+
+        # スペースキーで完全停止
+        elif key == ord(' '):
+            print("Stop all motion")
+            self.vx = self.vy = self.vz = self.yaw = 0
 
         return False  # まだ終わらない
+
+    def update_motion(self):
+        """現在の速度(vx,vy,vz,yaw)をTelloに送る（毎フレーム呼ぶ）"""
+        if not self.in_flight:
+            return
+
+        try:
+            self.tello.send_rc_control(self.vx, self.vy, self.vz, self.yaw)
+        except Exception as e:
+            print(f"send_rc_control failed: {e}")
 
     def cleanup(self):
         """ストリーム停止・緊急着陸などの後片付け"""
