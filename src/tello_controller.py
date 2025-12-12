@@ -90,15 +90,15 @@ class TelloController:
         vx = vy = vz = yaw = 0
 
         # 前後
-        if self.kb.is_pressed('w'):
+        if self.kb.is_pressed('d'):
             vx += self.speed
-        if self.kb.is_pressed('s'):
+        if self.kb.is_pressed('a'):
             vx -= self.speed
 
         # 左右
-        if self.kb.is_pressed('d'):
+        if self.kb.is_pressed('w'):
             vy += self.speed
-        if self.kb.is_pressed('a'):
+        if self.kb.is_pressed('s'):
             vy -= self.speed
 
         # 上下
