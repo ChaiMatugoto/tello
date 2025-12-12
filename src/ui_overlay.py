@@ -2,266 +2,197 @@
 import cv2
 import numpy as np
 
-TEXT_COLOR   = (230, 230, 230)   # 白っぽい
-ACCENT_COLOR = (255, 100, 200)   # ピンク
-CYAN         = (255, 255, 0)     # シアン
+TEXT = (240, 240, 240)
+DIM  = (170, 170, 170)
+PANEL = (0, 0, 0)
+CIRCLE = (200, 200, 200)
+FILL = (0, 0, 0)
 
 
 class DroneUI:
     """
-    黒背景 + 左に映像, 右に情報パネル
-    下に操作ヘルプを出すUI
+    全画面映像の上にUIを重ねる
+    - 右上：丸3つ(ROLL/PITCH/YAW)
+    - その下：丸3つ(ACC X/Y/Z)
+    - その下：縦バー3本(ALT / SPD / BAT)
+    - 左上：SN
+    - 上部：TEMP / TIME
+    - 左下：コマンド
+    - 右下：WiFi
     """
 
     def __init__(self, panel_width: int = 260, bottom_margin: int = 60):
+        # 互換のため残す（今は使わない）
         self.panel_width = panel_width
         self.bottom_margin = bottom_margin
 
-    # ---------- 角度メーターを描く内部関数 ----------
-    def _draw_gauge(self, img, center, radius, value, vmin, vmax, label):
-        """
-        半円ゲージ + 針 を描画する
-        value が None のときは「NO DATA」を表示して針は描かない
-        """
-        # 外枠の半円（210°～ -30°くらいの上側アーチ）
-        start_angle = 210
-        end_angle   = -30
-        cv2.ellipse(
-            img, center, (radius, radius),
-            0, start_angle, end_angle,
-            CYAN, 2, cv2.LINE_AA
-        )
-
-        # 目盛り線
-        for t in np.linspace(0.0, 1.0, 5):
-            a = np.deg2rad(start_angle + (end_angle - start_angle) * t)
-            x1 = int(center[0] + radius * 0.8 * np.cos(a))
-            y1 = int(center[1] - radius * 0.8 * np.sin(a))
-            x2 = int(center[0] + radius * 0.9 * np.cos(a))
-            y2 = int(center[1] - radius * 0.9 * np.sin(a))
-            cv2.line(img, (x1, y1), (x2, y2), (80, 80, 80), 1, cv2.LINE_AA)
-
-        # ラベル
-        cv2.putText(
-            img, f"{label}",
-            (center[0] - radius, center[1] + radius + 15),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5, CYAN, 1, cv2.LINE_AA
-        )
-
-        if value is None:
-            # 針は描かず「NO DATA」
-            cv2.putText(
-                img, "NO DATA",
-                (center[0] - radius, center[1] + radius + 32),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5, (150, 150, 150), 1, cv2.LINE_AA
-            )
-            cv2.circle(img, center, 4, (100, 100, 100), -1, cv2.LINE_AA)
+    def _blend_rect(self, img, x1, y1, x2, y2, alpha=0.45):
+        x1 = max(0, min(img.shape[1] - 1, int(x1)))
+        x2 = max(0, min(img.shape[1], int(x2)))
+        y1 = max(0, min(img.shape[0] - 1, int(y1)))
+        y2 = max(0, min(img.shape[0], int(y2)))
+        if x2 <= x1 or y2 <= y1:
             return
+        roi = img[y1:y2, x1:x2]
+        overlay = roi.copy()
+        overlay[:] = PANEL
+        cv2.addWeighted(overlay, alpha, roi, 1 - alpha, 0, roi)
 
-        # 値を範囲内にクリップ
-        value = max(min(value, vmax), vmin)
+    def _put(self, img, text, org, scale, color=TEXT, thick=1):
+        cv2.putText(img, str(text), org, cv2.FONT_HERSHEY_SIMPLEX, scale, color, thick, cv2.LINE_AA)
 
-        # value -> 角度へマッピング
-        t = (value - vmin) / (vmax - vmin)  # 0～1
-        ang = start_angle + (end_angle - start_angle) * t
-        ang_rad = np.deg2rad(ang)
+    def _put_right(self, img, text, right_x, y, scale, color=TEXT, thick=1):
+        (tw, th), _ = cv2.getTextSize(str(text), cv2.FONT_HERSHEY_SIMPLEX, scale, thick)
+        self._put(img, text, (int(right_x - tw), int(y)), scale, color, thick)
 
-        # 針
-        x_needle = int(center[0] + radius * 0.75 * np.cos(ang_rad))
-        y_needle = int(center[1] - radius * 0.75 * np.sin(ang_rad))
-        cv2.line(
-            img, center, (x_needle, y_needle),
-            ACCENT_COLOR, 2, cv2.LINE_AA
-        )
+    def _circle_label(self, img, center, r, label, value=None, scale=0.55):
+        cv2.circle(img, center, r, CIRCLE, -1, cv2.LINE_AA)
+        cv2.circle(img, center, r, (150, 150, 150), 1, cv2.LINE_AA)
 
-        # 中心点
-        cv2.circle(img, center, 4, ACCENT_COLOR, -1, cv2.LINE_AA)
+        # ラベル（中央）
+        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, scale, 1)
+        self._put(img, label, (center[0] - tw // 2, center[1] + th // 2), scale, (70, 70, 70), 1)
 
-        # 数値表示
-        cv2.putText(
-            img, f"{int(value)} deg",
-            (center[0] - radius, center[1] + radius + 32),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5, TEXT_COLOR, 1, cv2.LINE_AA
-        )
+        # 値（小さく下側） ※要らなければ消してOK
+        if value is not None:
+            s2 = max(0.45, scale - 0.10)
+            txt = str(value)
+            (tw2, th2), _ = cv2.getTextSize(txt, cv2.FONT_HERSHEY_SIMPLEX, s2, 1)
+            self._put(img, txt, (center[0] - tw2 // 2, center[1] + r - 6), s2, (60, 60, 60), 1)
 
-    # ---------- メイン描画 ----------
+    def _bar(self, img, x, y, w, h, ratio):
+        # 背景
+        cv2.rectangle(img, (x, y), (x + w, y + h), (230, 230, 230), -1)
+        cv2.rectangle(img, (x, y), (x + w, y + h), (160, 160, 160), 1)
+
+        ratio = 0.0 if ratio is None else float(ratio)
+        ratio = max(0.0, min(1.0, ratio))
+
+        fh = int(h * ratio)
+        if fh > 0:
+            cv2.rectangle(img, (x, y + (h - fh)), (x + w, y + h), FILL, -1)
+
     def draw(
         self,
         frame,
         *,
+        # 既存互換
         battery=None,
         roll=None,
         pitch=None,
         yaw=None,
         height=None,
         total_alt=None,
+
+        # 追加で渡せたら表示（渡さなくてもOK）
+        sn=None,
+        temp=None,          # 温度（℃）
+        flight_time=None,   # time（秒）
+        agx=None, agy=None, agz=None,   # 加速度
+        speed=None,         # 速度（任意単位）
+        wifi=None,          # wifi強度（SNR or dBm）
+        commands=None,      # 左下に出す文字列
     ):
-        """
-        左に frame の映像、右にステータス、
-        下に操作ヘルプを描画したキャンバスを返す。
-
-        値が None の場合は「NO DATA」表示にする。
-        """
         h, w, _ = frame.shape
+        canvas = frame.copy()
 
-        H = h + self.bottom_margin
-        W = w + self.panel_width
+        # スケールは画面幅に応じて調整
+        s = max(0.6, min(1.2, w / 900.0))
 
-        # 黒背景キャンバス
-        canvas = np.zeros((H, W, 3), dtype=np.uint8)
+        # ===== 左上：SN =====
+        sn_text = f"SN: {sn if sn is not None else '--'}"
+        self._blend_rect(canvas, 0, 0, int(240 * s), int(44 * s), alpha=0.35)
+        self._put(canvas, sn_text, (int(14 * s), int(30 * s)), 0.9 * s, TEXT, 2)
 
-        # 左上に映像を貼る
-        canvas[0:h, 0:w] = frame
+        # ===== 上：TEMP / TIME =====
+        temp_text = "--" if temp is None else str(int(temp))
+        time_text = "--" if flight_time is None else str(int(flight_time))
+        top_line = f"TEMP:{temp_text}  time:{time_text}s"
+        self._blend_rect(canvas, int(w * 0.45), 0, w, int(44 * s), alpha=0.35)
+        self._put_right(canvas, top_line, int(w - 14 * s), int(30 * s), 0.75 * s, TEXT, 2)
 
-        # 映像とパネルの境界線
-        cv2.line(canvas, (w, 0), (w, h), (80, 80, 80), 1, cv2.LINE_AA)
+        # ===== 右側UIブロックの座標設計 =====
+        margin = int(18 * s)
+        r = int(26 * s)  # 円の半径
+        r = max(20, min(r, 36))
+        gap = int(14 * s)
 
-        # 右パネルの描画
-        x0 = w + 20
-        y  = 40
+        block_w = (2 * r) * 3 + gap * 2
+        block_x0 = w - margin - block_w
+        row1_y = int(80 * s)
+        row2_y = row1_y + (2 * r) + int(18 * s)
 
-        # タイトル
-        cv2.putText(
-            canvas,
-            "TELLO STATUS",
-            (x0, y),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.8,
-            ACCENT_COLOR,
-            2,
-            cv2.LINE_AA,
-        )
-        y += 40
+        # 背景（右上の丸＋バー一帯）
+        bg_x1 = block_x0 - int(12 * s)
+        bg_y1 = row1_y - int(28 * s)
+        bg_x2 = w - margin + int(12 * s)
+        bg_y2 = int(h * 0.87)
+        self._blend_rect(canvas, bg_x1, bg_y1, bg_x2, bg_y2, alpha=0.25)
 
-        # バッテリー
-        cv2.putText(
-            canvas,
-            "BATTERY",
-            (x0, y),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            CYAN,
-            1,
-            cv2.LINE_AA,
-        )
-        y += 25
+        # ===== 右上：角度3つ（横並び） =====
+        cx1 = block_x0 + r
+        cx2 = cx1 + (2 * r) + gap
+        cx3 = cx2 + (2 * r) + gap
+        self._circle_label(canvas, (cx1, row1_y), r, "ROLL",  None if roll  is None else int(roll),  0.50 * s)
+        self._circle_label(canvas, (cx2, row1_y), r, "PITCH", None if pitch is None else int(pitch), 0.50 * s)
+        self._circle_label(canvas, (cx3, row1_y), r, "YAW",   None if yaw   is None else int(yaw),   0.50 * s)
 
-        if battery is None:
-            cv2.putText(
-                canvas,
-                "NO DATA",
-                (x0 + 10, y),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                (150, 150, 150),
-                1,
-                cv2.LINE_AA,
-            )
-        else:
-            cv2.putText(
-                canvas,
-                f"{battery:3d} %",
-                (x0 + 10, y),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                TEXT_COLOR,
-                2,
-                cv2.LINE_AA,
-            )
-        y += 35
+        # ===== 右上：加速度3つ（横並び） =====
+        # 画像は「加速度」×3に見えるので、見た目は同じにして値だけ変える
+        self._circle_label(canvas, (cx1, row2_y), r, "ACC", None if agx is None else int(agx), 0.55 * s)
+        self._circle_label(canvas, (cx2, row2_y), r, "ACC", None if agy is None else int(agy), 0.55 * s)
+        self._circle_label(canvas, (cx3, row2_y), r, "ACC", None if agz is None else int(agz), 0.55 * s)
 
-        # --- 角度ゲージ（3つ） ---
-        gauge_center_x = x0 + 100
-        base_y = y + 40
-        radius = 40
+        # ===== 右側：縦バー3本（ALT / SPD / BAT） =====
+        bar_top = row2_y + r + int(28 * s)
+        bar_h = int(120 * s)
+        bar_h = max(80, min(bar_h, int(h * 0.35)))
+        bar_w = int(30 * s)
+        bar_w = max(22, min(bar_w, 42))
 
-        self._draw_gauge(canvas,
-                         (gauge_center_x, base_y),
-                         radius,
-                         roll,   # Noneなら中でNO DATA
-                         -90, 90,
-                         "ROLL (X)")
+        bx1 = cx1 - bar_w // 2
+        bx2 = cx2 - bar_w // 2
+        bx3 = cx3 - bar_w // 2
 
-        self._draw_gauge(canvas,
-                         (gauge_center_x, base_y + 110),
-                         radius,
-                         pitch,
-                         -90, 90,
-                         "PITCH (Y)")
+        # 値→割合（適当にでも動くようにデフォルトレンジを置く）
+        # 高度：0〜300cm を 0〜1 に（必要なら変えてOK）
+        alt_ratio = None
+        if height is not None:
+            alt_ratio = max(0.0, min(1.0, float(height) / 300.0))
 
-        self._draw_gauge(canvas,
-                         (gauge_center_x, base_y + 220),
-                         radius,
-                         yaw,
-                         -180, 180,
-                         "YAW (Z)")
+        # 速度：0〜100 を 0〜1 に（speed が無ければ None）
+        spd_ratio = None
+        if speed is not None:
+            spd_ratio = max(0.0, min(1.0, float(speed) / 100.0))
 
-        # --- 高度と積分値 ---
-        y_alt = base_y + 220 + radius + 60
-        if y_alt < h - 20:
-            cv2.putText(
-                canvas,
-                "ALTITUDE",
-                (x0, y_alt),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                CYAN,
-                1,
-                cv2.LINE_AA,
-            )
-            y_alt += 25
+        # バッテリー：0〜100%
+        bat_ratio = None
+        if battery is not None:
+            bat_ratio = max(0.0, min(1.0, float(battery) / 100.0))
 
-            if (height is None) and (total_alt is None):
-                cv2.putText(
-                    canvas,
-                    "NO DATA",
-                    (x0 + 10, y_alt),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    (150, 150, 150),
-                    1,
-                    cv2.LINE_AA,
-                )
-            else:
-                if height is not None:
-                    cv2.putText(
-                        canvas,
-                        f"current : {height:4d} cm",
-                        (x0 + 10, y_alt),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        TEXT_COLOR,
-                        2,
-                        cv2.LINE_AA,
-                    )
-                    y_alt += 22
+        self._bar(canvas, bx1, bar_top, bar_w, bar_h, alt_ratio)
+        self._bar(canvas, bx2, bar_top, bar_w, bar_h, spd_ratio)
+        self._bar(canvas, bx3, bar_top, bar_w, bar_h, bat_ratio)
 
-                if total_alt is not None:
-                    cv2.putText(
-                        canvas,
-                        f"sum dH : {int(total_alt):4d} cm",
-                        (x0 + 10, y_alt),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        TEXT_COLOR,
-                        2,
-                        cv2.LINE_AA,
-                    )
+        # ラベル（下）
+        label_y = bar_top + bar_h + int(24 * s)
 
-        # === 下の余白に操作ヘルプ ===
-        controls = "[T]takeoff  [G]land  [W/A/S/D]move  [R/F]up/down  [E/X]yaw  [Z]quit"
-        cv2.putText(
-            canvas,
-            controls,
-            (20, H - 20),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.45,
-            (160, 160, 160),
-            1,
-            cv2.LINE_AA,
-        )
+        alt_txt = f"ALT {int(height)}cm" if height is not None else "ALT --"
+        spd_txt = f"SPD {int(speed)}" if speed is not None else "SPD --"
+        bat_txt = f"BAT:{int(battery)}%" if battery is not None else "BAT:--%"
+
+        self._put(canvas, alt_txt, (bx1 - int(18 * s), label_y), 0.55 * s, TEXT, 1)
+        self._put(canvas, spd_txt, (bx2 - int(18 * s), label_y), 0.55 * s, TEXT, 1)
+        self._put(canvas, bat_txt, (bx3 - int(18 * s), label_y), 0.55 * s, TEXT, 1)
+
+        # ===== 右下：wifi強度 =====
+        wifi_txt = f"wifi:{wifi if wifi is not None else '--'}"
+        self._put_right(canvas, wifi_txt, int(w - 14 * s), int(h - 14 * s), 0.6 * s, TEXT, 1)
+
+        # ===== 左下：コマンド表示 =====
+        if commands is None:
+            commands = "cmd: [T]takeoff [G]land [WASD]move [R/F]up/down [E/X]yaw [Z]quit"
+        self._blend_rect(canvas, 0, int(h - 46 * s), int(w * 0.70), h, alpha=0.35)
+        self._put(canvas, commands, (int(14 * s), int(h - 16 * s)), 0.55 * s, TEXT, 1)
 
         return canvas
