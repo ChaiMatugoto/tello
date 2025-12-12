@@ -109,7 +109,7 @@ class TelloController:
         # 回転
         if self.kb.is_pressed('e'):
             yaw += self.speed
-        if self.kb.is_pressed('x'):
+        if self.kb.is_pressed('q'):
             yaw -= self.speed
 
         # スペースで即停止
