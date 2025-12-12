@@ -1,4 +1,5 @@
 # main.py
+import time
 import cv2
 import numpy as np
 import threading
@@ -6,11 +7,13 @@ import threading
 from tello_controller import TelloController
 from aruco_detector import ArUcoDetector
 from ui_overlay import DroneUI
+from keyboard_state import KeyboardState
 
 
 def main():
+    kb = KeyboardState()
     # 各コンポーネントを準備
-    controller = TelloController()
+    controller = TelloController(kb)
     detector = ArUcoDetector()          # process(frame, draw=True, draw_id=True/False)
     ui = DroneUI(panel_width=260, bottom_margin=60)
 
@@ -46,6 +49,7 @@ def main():
 
         if frame is None:
             frame = blank_frame.copy()
+        
 
         # ===== ArUco 検出（映像上には枠だけ描画、ID文字は出さない） =====
         try:
@@ -126,7 +130,13 @@ def main():
                 # ここで落とさない
                 pass
 
-    # ===== 終了処理 =====
+        # ここで「今押されているキー」から速度を決める
+        controller.update_motion_from_keyboard()
+        controller.update_motion()
+
+        # 送信頻度を落としすぎない程度のスリープ（だいたい20Hz）
+        time.sleep(0.05)
+
     try:
         controller.cleanup()
     except Exception:
