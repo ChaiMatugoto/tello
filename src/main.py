@@ -35,6 +35,10 @@ def main():
     blank_frame = np.zeros((480, 640, 3), dtype=np.uint8)
 
     while True:
+        window_name = "Tello UI"
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
         # ===== 接続できているかの簡易判定 =====
         # connect_and_start_stream() が成功すると frame_read が設定される前提
         connected = getattr(controller, "frame_read", None) is not None
