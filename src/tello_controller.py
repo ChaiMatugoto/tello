@@ -42,6 +42,8 @@ class TelloController:
         frame = self.frame_read.frame
         if frame is None:
             return 255 * np.ones((size[1], size[0], 3), dtype=np.uint8)
+        
+        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
         return cv2.resize(frame, size)
 

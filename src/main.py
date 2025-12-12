@@ -49,6 +49,7 @@ def main():
 
         if frame is None:
             frame = blank_frame.copy()
+        
 
         # ===== ArUco 検出（映像上には枠だけ描画、ID文字は出さない） =====
         try:
