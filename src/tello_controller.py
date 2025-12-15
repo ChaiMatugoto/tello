@@ -22,7 +22,8 @@ class TelloController:
         self.vz = 0
         self.yaw = 0
 
-        self.speed = 80
+        self.speed = 100
+        self.brake_ratio = 0.6
 
     def connect_and_start_stream(self):
         """Telloに接続して映像ストリーム開始"""
@@ -31,18 +32,19 @@ class TelloController:
         self.tello.streamon()
         self.frame_read = self.tello.get_frame_read()
 
-    def get_frame(self, size=(640, 480)):
-        """現在のフレームを取得してリサイズして返す"""
+    def get_frame(self):
+        """現在のフレームをそのまま返す（リサイズは main 側でやる）"""
         if self.frame_read is None:
-            return 255 * np.ones((size[1], size[0], 3), dtype=np.uint8)
+            return np.zeros((480, 640, 3), dtype=np.uint8)
 
         frame = self.frame_read.frame
         if frame is None:
-            return 255 * np.ones((size[1], size[0], 3), dtype=np.uint8)
-        
-        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            return np.zeros((480, 640, 3), dtype=np.uint8)
 
-        return cv2.resize(frame, size)
+        # ★ 色変換も軽く：cv2.cvtColor ではなく numpy で RGB→BGR
+        frame = frame[:, :, ::-1]
+
+        return frame
 
     def handle_key(self, key):
         """
@@ -82,42 +84,45 @@ class TelloController:
         return False
 
     def update_motion_from_keyboard(self):
-        """KeyboardState の状態から vx,vy,vz,yaw を更新"""
         if not self.in_flight:
             return
 
         vx = vy = vz = yaw = 0
 
+        speed = self.speed
+        if self.kb.is_pressed('shift'):
+            speed = self.speed // 3  # 精密モード（80→40など）
+
         # 前後
         if self.kb.is_pressed('d'):
-            vx += self.speed
+            vx += speed
         if self.kb.is_pressed('a'):
-            vx -= self.speed
+            vx -= speed
 
         # 左右
         if self.kb.is_pressed('w'):
-            vy += self.speed
+            vy += speed
         if self.kb.is_pressed('s'):
-            vy -= self.speed
+            vy -= speed
 
         # 上下
         if self.kb.is_pressed('r'):
-            vz += self.speed
+            vz += speed
         if self.kb.is_pressed('f'):
-            vz -= self.speed
+            vz -= speed
 
         # 回転
         if self.kb.is_pressed('e'):
-            yaw += self.speed
+            yaw += speed
         if self.kb.is_pressed('q'):
-            yaw -= self.speed
+            yaw -= speed
 
         # スペースで即停止
-        if self.kb.is_pressed(' '):
+        if self.kb.is_pressed('space'):
             vx = vy = vz = yaw = 0
 
-        # 計算結果を反映
         self.vx, self.vy, self.vz, self.yaw = vx, vy, vz, yaw
+
 
     def update_motion(self):
         """send_rc_control を実行（毎フレーム呼ぶ）"""

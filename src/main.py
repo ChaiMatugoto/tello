@@ -55,7 +55,10 @@ def main():
     # Tello未接続でも表示できるダミーフレーム（あとでターゲットサイズが分かったら作り直す）
     blank_frame = np.zeros((480, 640, 3), dtype=np.uint8)
 
+    frame_count = 0
+
     while True:
+        frame_count += 1
         # ===== 接続できているかの簡易判定 =====
         # frame_read ではなく tello の存在で判定（stateだけ先に来るケースを拾う）
         connected = getattr(controller, "tello", None) is not None
@@ -88,7 +91,8 @@ def main():
 
         # ===== ArUco 検出 =====
         try:
-            frame, ids, corners = detector.process(frame, draw=True, draw_id=False)
+            if frame_count % 2 == 0:
+                frame, ids, corners = detector.process(frame, draw=True, draw_id=False)
         except Exception:
             pass
 
@@ -160,17 +164,17 @@ def main():
         canvas = ui.draw(
             frame,
             battery=battery,
-            roll=roll,
-            pitch=pitch,
-            yaw=yaw,
-            height=height,
-            total_alt=total_alt,
-            speed=speed,
+            # roll=roll,
+            # pitch=pitch,
+            # yaw=yaw,
+            # height=height,
+            # total_alt=total_alt,
+            # speed=speed,
 
-            # ★追加：ACC / TEMP / TIME を渡す
-            agx=agx, agy=agy, agz=agz,
-            temp=temp,
-            flight_time=flight_time,
+            # # ★追加：ACC / TEMP / TIME を渡す
+            # agx=agx, agy=agy, agz=agz,
+            # temp=temp,
+            # flight_time=flight_time,
         )
 
         # ===== 画面表示 =====
@@ -197,7 +201,7 @@ def main():
             except Exception:
                 pass
 
-        time.sleep(0.05)
+        time.sleep(0.03)
 
     try:
         controller.cleanup()
