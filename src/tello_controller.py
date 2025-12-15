@@ -25,6 +25,14 @@ class TelloController:
         self.speed = 100
         self.brake_ratio = 0.6
 
+        # ★オートランディング用：高さ→前進距離の比例係数 d = k * h
+        #   cキーでキャリブレーションして中身を決める
+        self.k_forward_per_height = None      # None の間はオートランディング不可
+        self.calib_distance_cm = 300          # 基準高さで「この距離だけ前に進めばよい」(3m)
+
+    # --------------------------------------------------------
+    # 接続・映像
+    # --------------------------------------------------------
     def connect_and_start_stream(self):
         """Telloに接続して映像ストリーム開始"""
         self.tello.connect()
@@ -46,6 +54,9 @@ class TelloController:
 
         return frame
 
+    # --------------------------------------------------------
+    # キー入力（単発系：終了・離着陸・オートランディング）
+    # --------------------------------------------------------
     def handle_key(self, key):
         """
         cv2.waitKey() から渡されたキーを処理（終了・離着陸など）
@@ -71,7 +82,7 @@ class TelloController:
             except Exception as e:
                 print(f"Takeoff failed: {e}")
 
-        # 着陸
+        # 着陸（通常）
         elif key == ord('g'):
             print("Land requested")
             try:
@@ -81,8 +92,89 @@ class TelloController:
             self.in_flight = False
             self.vx = self.vy = self.vz = self.yaw = 0
 
+        # ★ キャリブレーション（基準高さで3m進めば良いときの k を計算）
+        elif key == ord('c'):
+            self.calibrate_auto_landing()
+
+        # ★ オートランディング（画面中央に見えている地点の上へ前進してから着陸）
+        elif key == ord('l'):
+            self.auto_land_to_center()
+
         return False
 
+    # --------------------------------------------------------
+    # オートランディング関連
+    # --------------------------------------------------------
+    def calibrate_auto_landing(self):
+        """
+        現在の高さ h0 と「基準距離 calib_distance_cm」から比例定数 k = d0 / h0 を求める。
+        事前に「takeoff直後の高さで、画面中央の点の真上に来るまで3m進めば良い」
+        という状況で c キーを押してキャリブする想定。
+        """
+        if not self.in_flight:
+            print("[AUTO-LAND] Not in flight. Take off first.")
+            return
+
+        try:
+            h0 = self.tello.get_height()  # cm
+        except Exception as e:
+            print(f"[AUTO-LAND] Failed to get height: {e}")
+            return
+
+        if h0 is None or h0 <= 0:
+            print(f"[AUTO-LAND] Invalid height for calibration: {h0}")
+            return
+
+        k = self.calib_distance_cm / float(h0)
+        self.k_forward_per_height = k
+        print(f"[AUTO-LAND] Calibrated: height={h0}cm, dist={self.calib_distance_cm}cm → k={k:.3f}")
+
+    def auto_land_to_center(self):
+        """
+        画面中央に見えている地点の上まで前進してから着陸する。
+        d = k * h の関係を使う。
+        """
+        if not self.in_flight:
+            print("[AUTO-LAND] Not in flight.")
+            return
+
+        if self.k_forward_per_height is None:
+            print("[AUTO-LAND] Not calibrated yet. Press 'c' at the reference height first.")
+            return
+
+        # 現在の高さを取得
+        try:
+            h = self.tello.get_height()  # cm
+        except Exception as e:
+            print(f"[AUTO-LAND] Failed to get height: {e}")
+            return
+
+        if h is None or h <= 0:
+            print(f"[AUTO-LAND] Invalid current height: {h}")
+            return
+
+        # 前進距離 d = k * h
+        d = self.k_forward_per_height * float(h)
+
+        # 安全のため距離を制限（例: 20〜500cm）
+        d_clamped = int(max(20, min(d, 500)))
+
+        print(f"[AUTO-LAND] height={h}cm → move_forward ≈ {d:.1f}cm (clamped to {d_clamped}cm)")
+
+        try:
+            # まず前進
+            self.tello.move_forward(d_clamped)
+            # その後着陸
+            self.tello.land()
+            self.in_flight = False
+            self.vx = self.vy = self.vz = self.yaw = 0
+            print("[AUTO-LAND] Landed.")
+        except Exception as e:
+            print(f"[AUTO-LAND] Auto land failed: {e}")
+
+    # --------------------------------------------------------
+    # キーボードによるマニュアル操作（リアルタイム）
+    # --------------------------------------------------------
     def update_motion_from_keyboard(self):
         if not self.in_flight:
             return
@@ -91,7 +183,7 @@ class TelloController:
 
         speed = self.speed
         if self.kb.is_pressed('shift'):
-            speed = self.speed // 3  # 精密モード（80→40など）
+            speed = self.speed // 3  # 精密モード（100→33など）
 
         # 前後
         if self.kb.is_pressed('d'):
@@ -123,7 +215,6 @@ class TelloController:
 
         self.vx, self.vy, self.vz, self.yaw = vx, vy, vz, yaw
 
-
     def update_motion(self):
         """send_rc_control を実行（毎フレーム呼ぶ）"""
         if not self.in_flight:
@@ -133,7 +224,10 @@ class TelloController:
             self.tello.send_rc_control(self.vx, self.vy, self.vz, self.yaw)
         except Exception as e:
             print(f"send_rc_control failed: {e}")
-            
+
+    # --------------------------------------------------------
+    # 後片付け
+    # --------------------------------------------------------
     def cleanup(self):
         """ストリーム停止・緊急着陸などの後片付け"""
         try:
