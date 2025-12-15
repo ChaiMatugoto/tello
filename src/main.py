@@ -160,17 +160,17 @@ def main():
         canvas = ui.draw(
             frame,
             battery=battery,
-            roll=roll,
-            pitch=pitch,
-            yaw=yaw,
-            height=height,
-            total_alt=total_alt,
-            speed=speed,
+            # roll=roll,
+            # pitch=pitch,
+            # yaw=yaw,
+            # height=height,
+            # total_alt=total_alt,
+            # speed=speed,
 
-            # ★追加：ACC / TEMP / TIME を渡す
-            agx=agx, agy=agy, agz=agz,
-            temp=temp,
-            flight_time=flight_time,
+            # # ★追加：ACC / TEMP / TIME を渡す
+            # agx=agx, agy=agy, agz=agz,
+            # temp=temp,
+            # flight_time=flight_time,
         )
 
         # ===== 画面表示 =====
@@ -197,7 +197,7 @@ def main():
             except Exception:
                 pass
 
-        time.sleep(0.05)
+        time.sleep(0.03)
 
     try:
         controller.cleanup()
