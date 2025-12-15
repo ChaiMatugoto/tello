@@ -42,6 +42,11 @@ class DroneUI:
         self.bottom_margin = bottom_margin
         self.text_scale = text_scale
 
+        self.crosshair_enabled = True
+        self.crosshair_y_offset = 0   # +で下、-で上（px）
+        self.crosshair_size = 12      # 十字の半径（px）
+        self.crosshair_thickness = 1  # 線の太さ
+
     def compose_side(
         self,
         frame,
@@ -61,6 +66,8 @@ class DroneUI:
             ui_bg=ui_bg,
             **telemetry,
         )
+    
+
 
     # -----------------------------
     # 左（映像）側に出したいHUD
@@ -139,6 +146,28 @@ class DroneUI:
         pad2 = int(HUD_CMD_PAD * s)
         blend_rect(canvas, x - pad2, y - th2 - pad2, x + tw2 + pad2, y + pad2, alpha=HUD_CMD_ALPHA)
         put_outline(canvas, commands, (x, y), cmd_scale, TEXT, thickness=1, outline=2)
+
+                # ===== Crosshair (center) =====
+        if getattr(self, "crosshair_enabled", True):
+            cx = w // 2
+            cy = h // 2 + int(getattr(self, "crosshair_y_offset", 0))
+
+            size = int(getattr(self, "crosshair_size", 12))
+            thick = int(getattr(self, "crosshair_thickness", 1))
+
+            # 目立たせるために「縁取り → 本線」
+            # 中心点
+            cv2.circle(canvas, (cx, cy), max(2, thick + 2), (0, 0, 0), -1, cv2.LINE_AA)
+            cv2.circle(canvas, (cx, cy), max(1, thick), (255, 255, 120), -1, cv2.LINE_AA)  # CYANっぽい
+
+            # 横線
+            cv2.line(canvas, (cx - size, cy), (cx + size, cy), (0, 0, 0), thick + 2, cv2.LINE_AA)
+            cv2.line(canvas, (cx - size, cy), (cx + size, cy), (255, 255, 120), thick, cv2.LINE_AA)
+
+            # 縦線
+            cv2.line(canvas, (cx, cy - size), (cx, cy + size), (0, 0, 0), thick + 2, cv2.LINE_AA)
+            cv2.line(canvas, (cx, cy - size), (cx, cy + size), (255, 255, 120), thick, cv2.LINE_AA)
+
 
         return canvas
 
