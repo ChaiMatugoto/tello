@@ -76,7 +76,7 @@ class DroneUI:
         self,
         canvas,
         *,
-        sn=None,
+        aruno=None,
         temp=None,
         flight_time=None,
         wifi=None,
@@ -86,11 +86,11 @@ class DroneUI:
         s = _calc_s(w)
         ts = self.text_scale
 
-        # 左上 SN
-        sn_text = f"SN: {sn if sn is not None else '--'}"
+        # 左上 ArUco（ArUno）
+        aruno_text = f"ArUno: {aruno if aruno is not None else '--'}"
         boxed_text(
             canvas,
-            sn_text,
+            aruno_text,
             int(HUD_SN_X * s),
             int(HUD_SN_Y * s),
             HUD_SN_SCALE * s * ts,
@@ -299,7 +299,7 @@ class DroneUI:
         yaw=None,
         height=None,
         total_alt=None,
-        sn=None,
+        aruno=None,
         temp=None,
         flight_time=None,
         agx=None, agy=None, agz=None,
@@ -316,7 +316,7 @@ class DroneUI:
             canvas = frame.copy()
             self._render_hud_left(
                 canvas,
-                sn=sn,
+                aruno=aruno,
                 temp=temp,
                 flight_time=flight_time,
                 wifi=wifi,
@@ -327,7 +327,7 @@ class DroneUI:
         left = frame.copy()
         self._render_hud_left(
             left,
-            sn=sn,
+            aruno=aruno,
             temp=temp,
             flight_time=flight_time,
             wifi=wifi,

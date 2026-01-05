@@ -40,6 +40,7 @@ def main():
     # 高度の変化量を積分する用
     prev_height = None
     total_alt = 0.0
+    aruno_id = None
 
     # ===== 表示管理（ウィンドウ実サイズ追従 + 余白黒埋め + UI幅自動）=====
     dm = DisplayManager(
@@ -83,6 +84,13 @@ def main():
         try:
             if frame_count % 2 == 0:
                 frame, ids, corners = detector.process(frame, draw=True, draw_id=False)
+                if ids is not None and len(ids) > 0:
+                    try:
+                        aruno_id = int(ids.flatten()[0])
+                    except Exception:
+                        aruno_id = None
+                else:
+                    aruno_id = None
         except Exception:
             pass
 
@@ -158,6 +166,7 @@ def main():
             total_alt=total_alt,
             speed=speed,
             agx=agx, agy=agy, agz=agz,
+            aruno=aruno_id,
             temp=temp,
             flight_time=flight_time,
         )
