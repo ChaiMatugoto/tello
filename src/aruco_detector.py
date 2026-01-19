@@ -1,6 +1,7 @@
 # aruco_detector.py
 import cv2
 from cv2 import aruco
+import numpy as np
 
 
 class ArUcoDetector:
@@ -125,3 +126,36 @@ class ArUcoDetector:
                             cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
 
         return frame, ids, corners
+    
+    def get_marker_info(self, ids, corners, target_id=None):
+        """
+        ids/corners から「追従対象の1枚」を選んで
+        center(x,y), size_px を返す
+        size_px は「4辺の平均ピクセル長」
+        """
+        if ids is None or corners is None or len(ids) == 0:
+            return None
+
+        ids_flat = ids.flatten().tolist()
+
+        # 追うIDを指定してるならそれ、なければ最初の1枚
+        idx = 0
+        if target_id is not None and target_id in ids_flat:
+            idx = ids_flat.index(target_id)
+
+        c = corners[idx][0]  # shape: (4,2)  [tl,tr,br,bl] の順が多い
+        cx = float(np.mean(c[:, 0]))
+        cy = float(np.mean(c[:, 1]))
+
+        # 4辺の平均長
+        def dist(a, b):
+            return float(np.linalg.norm(a - b))
+
+        size_px = (dist(c[0], c[1]) + dist(c[1], c[2]) + dist(c[2], c[3]) + dist(c[3], c[0])) / 4.0
+
+        return {
+            "id": int(ids_flat[idx]),
+            "center": (cx, cy),
+            "size_px": size_px,
+            "corners": c,
+        }

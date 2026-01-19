@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 from djitellopy import Tello
 from keyboard_state import KeyboardState  # ★追加
+import time
 
 
 class TelloController:
@@ -29,6 +30,15 @@ class TelloController:
         #   cキーでキャリブレーションして中身を決める
         self.k_forward_per_height = None      # None の間はオートランディング不可
         self.calib_distance_cm = 420          # 基準高さで「この距離だけ前に進めばよい」(3m)
+
+        # ---- ArUco セミオート接近 ----
+        self.approach_enabled = False
+        self.target_aruco_id = None      # Noneなら見つけたやつに行く
+        self.target_size_px = 170        # ★この値に達したら「十分近い」と判断（要調整）
+        self.align_dead_px = 25          # 中心合わせの許容（px）
+        self.yaw_cmd = 35                # 旋回の強さ（0-100）
+        self.fwd_cmd = 25                # 前進の強さ（0-100）
+        self.last_marker_ts = 0.0
 
     # --------------------------------------------------------
     # 接続・映像
@@ -99,6 +109,12 @@ class TelloController:
         # ★ オートランディング（画面中央に見えている地点の上へ前進してから着陸）
         elif key == ord('l'):
             self.auto_land_to_center()
+
+        elif key == ord('p'):
+            self.approach_enabled = not self.approach_enabled
+            print(f"[APPROACH] enabled={self.approach_enabled}")
+            # ONにした瞬間は安全のため停止
+            self.vx = self.vy = self.vz = self.yaw = 0
 
         return False
 
@@ -243,3 +259,53 @@ class TelloController:
                 print(f"Emergency land failed: {e}")
 
         self.tello.end()
+
+    def update_approach_from_aruco(self, marker_info, frame_shape):
+        """
+        marker_info: detector.get_marker_info(...) の戻り
+        frame_shape: frame.shape
+        """
+        if not self.in_flight:
+            return
+        if not self.approach_enabled:
+            return
+
+        now = time.time()
+
+        # マーカー見失い
+        if marker_info is None:
+            # 0.4秒以上見えないなら停止
+            if (now - self.last_marker_ts) > 0.4:
+                self.vx = self.vy = self.vz = self.yaw = 0
+            return
+
+        self.last_marker_ts = now
+
+        h, w = frame_shape[0], frame_shape[1]
+        cx, cy = marker_info["center"]
+        size_px = marker_info["size_px"]
+
+        # 画面中心
+        midx = w / 2.0
+        err_x = cx - midx  # +なら右にある
+
+        # 1) まずヨーで中心に寄せる（左右だけでOK）
+        yaw = 0
+        if abs(err_x) > self.align_dead_px:
+            yaw = self.yaw_cmd if err_x > 0 else -self.yaw_cmd
+
+        # 2) 距離の代わりに size_px を使って前進/停止
+        #    size_px が小さい＝遠い → 前進
+        #    size_px が目標以上＝近い → 停止
+        vx = 0
+        if size_px < self.target_size_px:
+            # 中心がズレてる間は前進を弱めると安定する
+            if abs(err_x) > self.align_dead_px:
+                vx = int(self.fwd_cmd * 0.6)
+            else:
+                vx = self.fwd_cmd
+        else:
+            vx = 0  # 近いので止まる（このあと手動で or 別キーで land）
+
+        # ここでは「前進+ヨーだけ」上書き。上下/左右は0に固定
+        self.vx, self.vy, self.vz, self.yaw = int(vx), 0, 0, int(yaw)

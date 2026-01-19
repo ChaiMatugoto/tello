@@ -83,6 +83,9 @@ class DroneUI:
         flight_time=None,
         wifi=None,
         commands=None,
+        approach_state=None, 
+        approach_yaw=None, 
+        approach_vx=None
     ):
         h, w, _ = canvas.shape
         s = _calc_s(w)
@@ -169,6 +172,32 @@ class DroneUI:
             # 縦線
             cv2.line(canvas, (cx, cy - size), (cx, cy + size), (0, 0, 0), thick + 2, cv2.LINE_AA)
             cv2.line(canvas, (cx, cy - size), (cx, cy + size), (255, 255, 120), thick, cv2.LINE_AA)
+
+        # ===== 接近UI（矢印）=====
+        if approach_state == "approaching":
+            cx = w // 2
+            cy = h // 2
+
+            # yaw が +なら右に回したい → 右矢印
+            dy = 0
+            dx = 90 if (approach_yaw is not None and approach_yaw > 0) else (-90 if (approach_yaw is not None and approach_yaw < 0) else 0)
+
+            # 前進中なら上向き矢印も足す
+            forward = (approach_vx is not None and approach_vx > 0)
+
+            # 回転矢印
+            if dx != 0:
+                p1 = (cx, cy)
+                p2 = (cx + dx, cy)
+                cv2.arrowedLine(canvas, p1, p2, (0, 255, 255), 2, tipLength=0.25)
+
+            # 前進矢印
+            if forward:
+                p1 = (cx, cy)
+                p2 = (cx, cy - 110)
+                cv2.arrowedLine(canvas, p1, p2, (0, 255, 255), 2, tipLength=0.25)
+
+            boxed_text(canvas, "APPROACHING", int(14*s), int(80*s), 0.70*s*ts, TEXT, alpha=0.18)
 
 
         return canvas
@@ -347,6 +376,9 @@ class DroneUI:
         pos_range=3.0,
         wifi=None,
         commands=None,
+        approach_state=None,
+        approach_vx=None,
+        approach_yaw=None,
         layout="side",
         ui_bg=(245, 245, 245),
         ui_width=None,
@@ -363,6 +395,9 @@ class DroneUI:
             flight_time=flight_time,
             wifi=wifi,
             commands=commands,
+            approach_state=approach_state,
+            approach_vx=approach_vx,
+            approach_yaw=approach_yaw,
         )
             return canvas
 
@@ -375,6 +410,9 @@ class DroneUI:
             flight_time=flight_time,
             wifi=wifi,
             commands=commands,
+            approach_state=None,
+            approach_vx=None,
+            approach_yaw=None,
         )
 
         ui_w = w if ui_width is None else int(ui_width)

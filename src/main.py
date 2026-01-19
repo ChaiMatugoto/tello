@@ -165,6 +165,13 @@ def main():
             else:
                 aruno_id = None
 
+            # ===== セミオート接近（AruCo）=====
+            marker_info = detector.get_marker_info(
+                ids,
+                corners,
+                target_id=getattr(controller, "target_aruco_id", None)
+            )
+
             if frame_count % 30 == 0:
                 label = "webcam" if using_webcam else "tello"
                 print(f"[DEBUG {label}] ArUco ids: {ids.flatten().tolist() if ids is not None else None}")
@@ -285,6 +292,9 @@ def main():
             flight_time=flight_time,
             pos_xy=pos_xy,
             pos_range=(POS_RANGE_X, POS_RANGE_Y),
+            approach_state=getattr(controller, "approach_state", None),
+            approach_vx=getattr(controller, "approach_vx", None),
+            approach_yaw=getattr(controller, "approach_yaw", None),
         )
 
         # ===== “ちょい余白”対策：ウィンドウ実サイズに黒埋めで完全一致 =====
@@ -297,26 +307,43 @@ def main():
         if key == ord("z"):
             break
 
+        # 1) 単発キー（takeoff/land/autoなど）
         if connected:
             try:
-                if controller.handle_key(key):
+                should_quit = controller.handle_key(key)
+                if should_quit:
                     break
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[WARN] handle_key failed: {e}")
 
+        # 2) 飛行中だけRC制御を継続送信
         if controller.in_flight:
             try:
+                # 手動入力をまず反映
                 controller.update_motion_from_keyboard()
+
+                # 手動入力が無い時だけオート接近を上書き
+                is_manual = False
+                if hasattr(controller, "manual_active"):
+                    is_manual = controller.manual_active()  # あなたが用意してる前提
+
+                if (not is_manual) and getattr(controller, "approach_enabled", False):
+                    # marker_info が無い時のために安全に
+                    mi = locals().get("marker_info", None)
+                    controller.update_approach_from_aruco(mi, frame.shape)
+
+                # 最後に送信（これを毎フレーム継続するのが重要）
                 controller.update_motion()
+
+            except Exception as e:
+                print(f"[WARN] rc loop failed: {e}")
+
+                time.sleep(0.03)
+
+            try:
+                controller.cleanup()
             except Exception:
                 pass
-
-        time.sleep(0.03)
-
-    try:
-        controller.cleanup()
-    except Exception:
-        pass
     cv2.destroyAllWindows()
 
 
