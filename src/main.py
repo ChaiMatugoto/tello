@@ -347,7 +347,6 @@ def main():
             try:
                 # 手動入力をまず反映
                 controller.update_motion_from_keyboard()
-<<<<<<< HEAD
 
                 # 手動入力が無い時だけオート接近を上書き
                 is_manual = False
@@ -360,11 +359,9 @@ def main():
                     controller.update_approach_from_aruco(mi, frame.shape)
 
                 # 最後に送信（これを毎フレーム継続するのが重要）
-=======
                 if not command_sent_since_takeoff:
                     if any(abs(v) > 0 for v in (controller.vx, controller.vy, controller.vz, controller.yaw)):
                         command_sent_since_takeoff = True
->>>>>>> origin/main
                 controller.update_motion()
 
             except Exception as e:
@@ -376,8 +373,6 @@ def main():
                 controller.cleanup()
             except Exception:
                 pass
-<<<<<<< HEAD
-=======
 
         prev_in_flight = controller.in_flight
 
@@ -387,7 +382,6 @@ def main():
         controller.cleanup()
     except Exception:
         pass
->>>>>>> origin/main
     cv2.destroyAllWindows()
 
 
