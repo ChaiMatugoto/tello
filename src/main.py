@@ -65,8 +65,8 @@ def main():
     # 画面上でやや左寄りに初期位置を置く（X<0で左）
     pos_xy = np.array([-1.8, 0.5], dtype=float)
     vel_xy = np.array([0.0, 0.0], dtype=float)
-    POS_RANGE_X = 7.5  # UI上の表示範囲（左右, +-m相当）: 幅15m
-    POS_RANGE_Y = 15.0  # UI上の表示範囲（上下, +-m相当）: 高さ30m
+    POS_RANGE_X = 17.5  # UI上の表示範囲（左右, +-m相当）: 幅35m
+    POS_RANGE_Y = 10.0  # UI上の表示範囲（上下, +-m相当）: 高さ20m
     prev_time = time.perf_counter()
     ACCEL_DEADZONE = 0.09  # m/s^2 未満は停止扱い
     awaiting_data_reset = False
