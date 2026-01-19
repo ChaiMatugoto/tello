@@ -82,9 +82,7 @@ def main():
     blank_frame = np.zeros((480, 640, 3), dtype=np.uint8)
 
     frame_count = 0
-    webcam = None
     using_webcam = False
-    webcam_fail_logged = False
 
     while True:
         frame_count += 1
@@ -109,38 +107,9 @@ def main():
         if connected:
             frame = safe_call(controller.get_frame, None)
 
-        # ===== Tello未接続時はPCカメラにフォールバック =====
+        # ===== Tello未接続時はブランク表示のみ =====
         if frame is None or frame.size == 0:
             using_webcam = False
-            # 開いてなければオープンを試す（失敗は一度だけログ）
-            if webcam is None:
-                try:
-                    cam = cv2.VideoCapture(0)
-                    if cam.isOpened():
-                        webcam = cam
-                        webcam_fail_logged = False
-                        print("[INFO] Using PC camera fallback (Tello not connected).")
-                    else:
-                        cam.release()
-                        if not webcam_fail_logged:
-                            print("[WARN] PC camera not available.")
-                            webcam_fail_logged = True
-                except Exception:
-                    if not webcam_fail_logged:
-                        print("[WARN] PC camera open failed.")
-                        webcam_fail_logged = True
-                    webcam = None
-            if webcam is not None:
-                ret, cam_frame = webcam.read()
-                if ret and cam_frame is not None:
-                    frame = cam_frame
-                    using_webcam = True
-                else:
-                    # 読み取り失敗時は閉じて再トライ可能にする
-                    webcam.release()
-                    webcam = None
-
-        if frame is None:
             frame = blank_frame.copy()
 
         # ===== ArUco 検出 =====
@@ -325,11 +294,6 @@ def main():
         controller.cleanup()
     except Exception:
         pass
-    if webcam is not None:
-        try:
-            webcam.release()
-        except Exception:
-            pass
     cv2.destroyAllWindows()
 
 
