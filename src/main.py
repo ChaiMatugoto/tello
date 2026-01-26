@@ -58,7 +58,7 @@ def main():
 
     pos_xy = np.array([-1.8, 0.5], dtype=float)
     vel_xy = np.array([0.0, 0.0], dtype=float)
-    POS_RANGE_X = 50.0
+    POS_RANGE_X = 25.0
     POS_RANGE_Y = 35.0
     prev_time = time.perf_counter()
     ACCEL_DEADZONE = 0.09
