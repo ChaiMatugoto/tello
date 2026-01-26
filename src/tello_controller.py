@@ -31,7 +31,7 @@ class TelloController:
         self.yaw = 0
 
         # 手動速度
-        self.speed = 60
+        self.speed = 100
         self.precise_div = 3
 
         # ---- セミオート ----
